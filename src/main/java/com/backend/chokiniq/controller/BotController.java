@@ -58,6 +58,15 @@ public class BotController {
         String userRawText = messageContent.text().trim();
         System.out.println("=> => => => User (" + userId + ") sent: " + userRawText + "\n");
 
+        // INTERCEPT & EXECUTE DATABASE PURGE ---
+        if (userRawText.equalsIgnoreCase("/clear")) {
+            // Drop every single record matching this conversation_id inside the Supabase table
+            chatMemory.clear(userId);
+            
+            sendLineReply(event.replyToken(), "🧹 Memory cleared! Your past financial sins are deleted from my brain. Let's start fresh!");
+            return; 
+        }
+
         // 2. State-Persistence: Log the user's incoming message to Supabase
         chatMemory.add(userId, List.of(new UserMessage(userRawText)));
 
