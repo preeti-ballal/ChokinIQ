@@ -82,7 +82,6 @@ public class BotController {
 
         // It is a transaction so we save record
         if (extractedData != null && extractedData.isTransaction()) {
-            System.out.println("@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@Extracted Transaction Data: " + extractedData);
             // Process transactional updates & save
             Transaction transaction = new Transaction();
             transaction.setConversationId(userId);
@@ -95,14 +94,16 @@ public class BotController {
 
             BigDecimal monthlySpent = transactionRepository.getMonthlyTotalExpenses(userId);
 
+            BigDecimal budgetThreshold = new BigDecimal("100000");
+            boolean isOverBudget = monthlySpent.compareTo(budgetThreshold) > 0;
+
             // Synthesize structured transaction alert context back to the AI for conversational output
-            aiResponse = generateTransactionResponse(userId, userRawText, transaction, monthlySpent);
-            
+            aiResponse = generateTransactionResponse(userId, userRawText, transaction, monthlySpent, isOverBudget);
+
             // Log both the user's message and AI's response to short term memory for future context
             chatMemory.add(userId, List.of(new UserMessage(userRawText)));
             chatMemory.add(userId, List.of(new AssistantMessage(aiResponse)));
         }else{
-            System.out.println("@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@ No transaction data extracted, treating as casual conversation." + extractedData);
             // Standard conversational pipeline execution flow 
             chatMemory.add(userId, List.of(new UserMessage(userRawText)));
             String systemInstruction = determineSystemInstruction(userRawText);
@@ -146,15 +147,28 @@ public class BotController {
 
     /**
      * Synthesizes conversational context back to the model to confirm a successful ledger save with character.
+     * Over budget trigger automatically activates aggressive roast conditions.
      */
-    private String generateTransactionResponse(String userId, String rawText, Transaction transaction, BigDecimal monthlySpent) {
+    private String generateTransactionResponse(String userId, String rawText, Transaction transaction, 
+                                               BigDecimal monthlySpent, boolean isOverBudget) {
+        
+        String budgetStatusContext = "";
+        if (isOverBudget) {
+            budgetStatusContext = "CRITICAL WARNING: The user has officially crossed their monthly budget limit of 100,000 yen! " +
+                                  "You must change your tone to absolute panic and hilarious aggression. " +
+                                  "Tell them they are financially doomed, yell at them to stop spending entirely, and lock up their wallet.";
+        } else {
+            budgetStatusContext = "The user is still within their safe monthly spending limits. Acknowledge the transaction record clearly, " +
+                                  "use funny emojis, and give them a casual, witty reminder about their spending velocity.";
+        }
+
         String template = String.format(
             "You are ChokinIQ, a witty, sarcastic personal finance bot. " +
             "The user just typed: '%s'. You successfully extracted and logged this data: " +
             "Type: %s, Amount: %s yen, Category: %s, Item: '%s'. " +
-            "Their total recorded spending total for this current calendar month has now reached: %s yen. " +
-            "Acknowledge this transaction record clearly, use funny emojis, and roast them slightly about their current spending velocity.",
-            rawText, transaction.getType(), transaction.getAmount(), transaction.getCategory(), transaction.getDescription(), monthlySpent
+            "Their total recorded spending total for this current calendar month has now reached: %s yen.\n\n" +
+            "CURRENT STATUS CONTEXT:\n%s",
+            rawText, transaction.getType(), transaction.getAmount(), transaction.getCategory(), transaction.getDescription(), monthlySpent, budgetStatusContext
         );
 
         return chatModel.call(template);
