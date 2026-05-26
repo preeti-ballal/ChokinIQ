@@ -70,9 +70,15 @@ public class BotController {
         // /clear command: reset the memory
         if (userRawText.equalsIgnoreCase("/clear")) {
             chatMemory.clear(userId);
-            
             sendLineReply(event.replyToken(), "🧹 Memory cleared! Your past financial sins are deleted from my brain. Let's start fresh!");
             return; 
+        }
+
+        if (userRawText.equalsIgnoreCase("/stats")) {
+            BigDecimal monthlySpent = transactionRepository.getMonthlyTotalExpenses(userId);
+            String statsSummary = generateMonthlyStatsSummary(userId, monthlySpent);
+            sendLineReply(event.replyToken(), statsSummary);
+            return;
         }
 
         // 2. Evaluate if user is declaring transactional actions
@@ -212,5 +218,30 @@ public class BotController {
                 List.of(new TextMessage(textContent)),
                 false
         ));
+    }
+    /**
+     * Synthesizes a clean, structured financial health check dashboard for the /stats command.
+     */
+    private String generateMonthlyStatsSummary(String userId, BigDecimal monthlySpent) {
+        BigDecimal budgetThreshold = new BigDecimal("100000");
+        BigDecimal remainingBudget = budgetThreshold.subtract(monthlySpent);
+        
+        String budgetStatus = remainingBudget.signum() >= 0 
+            ? String.format("Safe! You have %s yen left before hitting your limit.", remainingBudget)
+            : String.format("🚨 CRITICAL CRASH! You are over budget by %s yen!", remainingBudget.abs());
+
+        String template = String.format(
+            "You are ChokinIQ, a witty, sarcastic personal finance bot. " +
+            "The user just requested their monthly financial dashboard summary.\n\n" +
+            "HERE ARE THE DIRECT DATABASE METRICS FOR THIS CALENDAR MONTH:\n" +
+            "- Current Total Expenses: %s yen\n" +
+            "- Strict Budget Target: 100,000 yen\n" +
+            "- Status: %s\n\n" +
+            "Format your response as a sleek, easy-to-read mini-dashboard text report using clean bullet points and emojis. " +
+            "Conclude with a sharp, funny one-sentence commentary on their current relationship with money.",
+            monthlySpent, budgetStatus
+        );
+
+        return chatModel.call(template);
     }
 }
